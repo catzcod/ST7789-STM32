@@ -8,16 +8,19 @@
 extern SPI_HandleTypeDef ST7789_SPI_PORT;
 
 /* choose whether use DMA or not */
-#define USE_DMA
+//#define USE_DMA
+
+/* choose whether use framebuffer or not */
+#define USE_FRAMEBUFFER
 
 /* If u need CS control, comment below*/
-//#define CFG_NO_CS
+#define CFG_NO_CS
 
 /* Pin connection*/
-#define ST7789_RST_PORT ST7789_RST_GPIO_Port
-#define ST7789_RST_PIN  ST7789_RST_Pin
-#define ST7789_DC_PORT  ST7789_DC_GPIO_Port
-#define ST7789_DC_PIN   ST7789_DC_Pin
+#define ST7789_RST_PORT DPY_RES_GPIO_Port
+#define ST7789_RST_PIN  DPY_RES_Pin
+#define ST7789_DC_PORT  DPY_DC_GPIO_Port
+#define ST7789_DC_PIN   DPY_DC_Pin
 
 #ifndef CFG_NO_CS
 #define ST7789_CS_PORT  ST7789_CS_GPIO_Port
@@ -245,6 +248,7 @@ void ST7789_InvertColors(uint8_t invert);
 /* Text functions. */
 void ST7789_WriteChar(uint16_t x, uint16_t y, char ch, FontDef font, uint16_t color, uint16_t bgcolor);
 void ST7789_WriteString(uint16_t x, uint16_t y, const char *str, FontDef font, uint16_t color, uint16_t bgcolor);
+void ST7789_WriteString_Fast(uint16_t x, uint16_t y, const char *str, FontDef font, uint16_t color, uint16_t bgcolor);
 
 /* Extented Graphical functions. */
 void ST7789_DrawFilledRectangle(uint16_t x, uint16_t y, uint16_t w, uint16_t h, uint16_t color);

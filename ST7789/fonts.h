@@ -23,12 +23,10 @@ extern FontDef Font_16x26;
  * These pics are for test purpose only.
  *******************************************/
 
-/* 128x128 pixel RGB565 image */
-extern const uint16_t saber[][128];
-
-/* 240x240 pixel RGB565 image 
-extern const uint16_t knky[][240];
-extern const uint16_t tek[][240];
+/* 240x240 pixel RGB565 image */
+/* 
+// Example of a picture
 extern const uint16_t adi1[][240];
 */
+
 #endif
