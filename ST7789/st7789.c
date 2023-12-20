@@ -38,9 +38,7 @@ static void ST7789_WriteData(uint8_t *buff, size_t buff_size)
 {
 	ST7789_Select();
 	ST7789_DC_Set();
-
 	// split data in small chunks because HAL can't send more than 64K at once
-
 	while (buff_size > 0) {
 		uint16_t chunk_size = buff_size > 65535 ? 65535 : buff_size;
 #ifdef USE_DMA
@@ -58,28 +56,6 @@ static void ST7789_WriteData(uint8_t *buff, size_t buff_size)
 		buff += chunk_size;
 		buff_size -= chunk_size;
 	}
-
-	ST7789_UnSelect();
-}
-
-static void ST7789_WriteData16bit(uint16_t *buff16bit, size_t buff_size)
-{
-	ST7789_Select();
-	ST7789_DC_Set();
-
-	// split data in small chunks because HAL can't send more than 64K at once
-
-	uint8_t *buff = (uint8_t*) (buff16bit);
-
-	while (buff_size > 0) {
-		uint16_t chunk_size = buff_size > 65535 ? 65535 : buff_size;
-
-		HAL_SPI_Transmit(&ST7789_SPI_PORT, buff, chunk_size, HAL_MAX_DELAY);
-
-		buff += chunk_size;
-		buff_size -= chunk_size;
-	}
-
 	ST7789_UnSelect();
 }
 
@@ -217,7 +193,7 @@ void ST7789_Init(void)
 }
 
 /**
- * @brief Fill the DisplayWindow with single color
+ * @brief Fill the DisplayWindow with single color RGB565
  * @param color -> color to Fill with
  * @return none
  */
@@ -230,7 +206,7 @@ void ST7789_Fill_Color(uint16_t color)
 	for (i = 0; i < ST7789_HEIGHT / HOR_LEN; i++)
 	{
 		memset(disp_buf, color, sizeof(disp_buf));
-		ST7789_WriteData16bit(disp_buf, sizeof(disp_buf));
+		ST7789_WriteData((uint8_t*)disp_buf, sizeof(disp_buf));
 	}
 #else
 	uint16_t j;
@@ -242,28 +218,10 @@ void ST7789_Fill_Color(uint16_t color)
 #endif
 }
 
-void ST7789_Fill_Random_Color()
-{
-	uint16_t color; //RGB565
-	uint16_t i;
-	ST7789_SetAddressWindow(0, 0, ST7789_WIDTH - 1, ST7789_HEIGHT - 1);
-
-	uint16_t maxlen = 57600;
-	uint16_t data[maxlen];
-	for (i = 0; i < maxlen; i++)
-	{
-		color = i;
-
-		data[i] = ((color >> 8) & 0x00FF) | (color << 8);
-
-	}
-	ST7789_WriteData16bit(data, sizeof(data));
-}
-
 void ST7789_Display_Framebuffer()
 {
 	ST7789_SetAddressWindow(0, 0, ST7789_WIDTH - 1, ST7789_HEIGHT - 1);
-	ST7789_WriteData16bit(disp_buf, sizeof(disp_buf));
+	ST7789_WriteData((uint8_t*)disp_buf, sizeof(disp_buf));
 }
 
 /**
@@ -312,9 +270,7 @@ void ST7789_DrawPixel_4px(uint16_t x, uint16_t y, uint16_t color)
 {
 	if ((x <= 0) || (x > ST7789_WIDTH) ||
 			(y <= 0) || (y > ST7789_HEIGHT))	return;
-	ST7789_Select();
 	ST7789_Fill(x - 1, y - 1, x + 1, y + 1, color);
-	ST7789_UnSelect();
 }
 
 /**
@@ -387,12 +343,10 @@ void ST7789_DrawLine(uint16_t x0, uint16_t y0, uint16_t x1, uint16_t y1,
  */
 void ST7789_DrawRectangle(uint16_t x1, uint16_t y1, uint16_t x2, uint16_t y2, uint16_t color)
 {
-	ST7789_Select();
 	ST7789_DrawLine(x1, y1, x2, y1, color);
 	ST7789_DrawLine(x1, y1, x1, y2, color);
 	ST7789_DrawLine(x1, y2, x2, y2, color);
 	ST7789_DrawLine(x2, y1, x2, y2, color);
-	ST7789_UnSelect();
 }
 
 /** 
@@ -410,7 +364,6 @@ void ST7789_DrawCircle(uint16_t x0, uint16_t y0, uint8_t r, uint16_t color)
 	int16_t x = 0;
 	int16_t y = r;
 
-	ST7789_Select();
 	ST7789_DrawPixel(x0, y0 + r, color);
 	ST7789_DrawPixel(x0, y0 - r, color);
 	ST7789_DrawPixel(x0 + r, y0, color);
@@ -436,7 +389,6 @@ void ST7789_DrawCircle(uint16_t x0, uint16_t y0, uint8_t r, uint16_t color)
 		ST7789_DrawPixel(x0 + y, y0 - x, color);
 		ST7789_DrawPixel(x0 - y, y0 - x, color);
 	}
-	ST7789_UnSelect();
 }
 
 /**
@@ -480,37 +432,6 @@ void ST7789_InvertColors(uint8_t invert)
  */
 void ST7789_WriteChar(uint16_t x, uint16_t y, char ch, FontDef font, uint16_t color, uint16_t bgcolor)
 {
-	uint32_t i, b, j;
-	ST7789_Select();
-	ST7789_SetAddressWindow(x, y, x + font.width - 1, y + font.height - 1);
-
-	for (i = 0; i < font.height; i++) {
-		b = font.data[(ch - 32) * font.height + i];
-		for (j = 0; j < font.width; j++) {
-			if ((b << j) & 0x8000) {
-				uint8_t data[] = {color >> 8, color & 0xFF};
-				ST7789_WriteData(data, sizeof(data));
-			}
-			else {
-				uint8_t data[] = {bgcolor >> 8, bgcolor & 0xFF};
-				ST7789_WriteData(data, sizeof(data));
-			}
-		}
-	}
-	ST7789_UnSelect();
-}
-
-/** 
- * @brief Write a char with a single data transfer
- * @param  x&y -> cursor of the start point.
- * @param ch -> char to write
- * @param font -> fontstyle of the string
- * @param color -> color of the char
- * @param bgcolor -> background color of the char
- * @return  none
- */
-void ST7789_WriteChar_Fast(uint16_t x, uint16_t y, char ch, FontDef font, uint16_t color, uint16_t bgcolor)
-{
 	uint32_t w, h, b;
 	uint32_t window_size = font.width * font.height;
 	uint16_t data[window_size];
@@ -526,10 +447,8 @@ void ST7789_WriteChar_Fast(uint16_t x, uint16_t y, char ch, FontDef font, uint16
 			}
 		}
 	}
-	ST7789_Select();
 	ST7789_SetAddressWindow(x, y, x + font.width - 1, y + font.height - 1);
-	ST7789_WriteData16bit(data, sizeof(data));
-	ST7789_UnSelect();
+	ST7789_WriteData((uint8_t*)data, sizeof(data));
 }
 
 /**
@@ -543,7 +462,6 @@ void ST7789_WriteChar_Fast(uint16_t x, uint16_t y, char ch, FontDef font, uint16
  */
 void ST7789_WriteString(uint16_t x, uint16_t y, const char *str, FontDef font, uint16_t color, uint16_t bgcolor)
 {
-	ST7789_Select();
 	ST7789_SetAddressWindow(x, y, x + font.width - 1, y + font.height - 1);
 	while (*str) {
 		if (x + font.width >= ST7789_WIDTH) {
@@ -563,7 +481,6 @@ void ST7789_WriteString(uint16_t x, uint16_t y, const char *str, FontDef font, u
 		x += font.width;
 		str++;
 	}
-	ST7789_UnSelect();
 }
 
 /**
@@ -599,9 +516,6 @@ void ST7789_WriteString_Fast(uint16_t x, uint16_t y, const char *str, FontDef fo
 	uint16_t data[window_size];
 	char ch;
 	uint32_t h,w,b;
-
-	ST7789_Select();
-
 	for (h = 0; h < window_height; h++) {
 		for (w = 0; w < window_width; w++) {
 			ch = str[w / font.width];
@@ -615,8 +529,7 @@ void ST7789_WriteString_Fast(uint16_t x, uint16_t y, const char *str, FontDef fo
 		}
 	}
 	ST7789_SetAddressWindow(x, y, x + window_width - 1, y + window_height - 1);
-	ST7789_WriteData16bit(data, sizeof(data));
-	ST7789_UnSelect();
+	ST7789_WriteData((uint8_t*)data, sizeof(data));
 }
 
 
@@ -629,7 +542,6 @@ void ST7789_WriteString_Fast(uint16_t x, uint16_t y, const char *str, FontDef fo
  */
 void ST7789_DrawFilledRectangle(uint16_t x, uint16_t y, uint16_t w, uint16_t h, uint16_t color)
 {
-	ST7789_Select();
 	uint8_t i;
 
 	/* Check input parameters */
@@ -652,7 +564,6 @@ void ST7789_DrawFilledRectangle(uint16_t x, uint16_t y, uint16_t w, uint16_t h, 
 		/* Draw lines */
 		ST7789_DrawLine(x, y + i, x + w, y + i, color);
 	}
-	ST7789_UnSelect();
 }
 
 /** 
@@ -663,12 +574,10 @@ void ST7789_DrawFilledRectangle(uint16_t x, uint16_t y, uint16_t w, uint16_t h, 
  */
 void ST7789_DrawTriangle(uint16_t x1, uint16_t y1, uint16_t x2, uint16_t y2, uint16_t x3, uint16_t y3, uint16_t color)
 {
-	ST7789_Select();
 	/* Draw lines */
 	ST7789_DrawLine(x1, y1, x2, y2, color);
 	ST7789_DrawLine(x2, y2, x3, y3, color);
 	ST7789_DrawLine(x3, y3, x1, y1, color);
-	ST7789_UnSelect();
 }
 
 /** 
@@ -679,7 +588,6 @@ void ST7789_DrawTriangle(uint16_t x1, uint16_t y1, uint16_t x2, uint16_t y2, uin
  */
 void ST7789_DrawFilledTriangle(uint16_t x1, uint16_t y1, uint16_t x2, uint16_t y2, uint16_t x3, uint16_t y3, uint16_t color)
 {
-	ST7789_Select();
 	int16_t deltax = 0, deltay = 0, x = 0, y = 0, xinc1 = 0, xinc2 = 0,
 			yinc1 = 0, yinc2 = 0, den = 0, num = 0, numadd = 0, numpixels = 0,
 			curpixel = 0;
@@ -736,7 +644,6 @@ void ST7789_DrawFilledTriangle(uint16_t x1, uint16_t y1, uint16_t x2, uint16_t y
 		x += xinc2;
 		y += yinc2;
 	}
-	ST7789_UnSelect();
 }
 
 /** 
@@ -748,7 +655,6 @@ void ST7789_DrawFilledTriangle(uint16_t x1, uint16_t y1, uint16_t x2, uint16_t y
  */
 void ST7789_DrawFilledCircle(int16_t x0, int16_t y0, int16_t r, uint16_t color)
 {
-	ST7789_Select();
 	int16_t f = 1 - r;
 	int16_t ddF_x = 1;
 	int16_t ddF_y = -2 * r;
@@ -773,11 +679,9 @@ void ST7789_DrawFilledCircle(int16_t x0, int16_t y0, int16_t r, uint16_t color)
 
 		ST7789_DrawLine(x0 - x, y0 + y, x0 + x, y0 + y, color);
 		ST7789_DrawLine(x0 + x, y0 - y, x0 - x, y0 - y, color);
-
 		ST7789_DrawLine(x0 + y, y0 + x, x0 - y, y0 + x, color);
 		ST7789_DrawLine(x0 + y, y0 - x, x0 - y, y0 - x, color);
 	}
-	ST7789_UnSelect();
 }
 
 
@@ -788,9 +692,7 @@ void ST7789_DrawFilledCircle(int16_t x0, int16_t y0, int16_t r, uint16_t color)
  */
 void ST7789_TearEffect(uint8_t tear)
 {
-	ST7789_Select();
 	ST7789_WriteCommand(tear ? 0x35 /* TEON */ : 0x34 /* TEOFF */);
-	ST7789_UnSelect();
 }
 
 
@@ -803,67 +705,44 @@ void ST7789_Test(void)
 {
 
 	ST7789_Fill_Color(WHITE);
-	HAL_Delay(1000);
-
 	ST7789_WriteString(10, 20, "Speed Test", Font_11x18, RED, WHITE);
 	HAL_Delay(1000);
+
 	ST7789_Fill_Color(CYAN);
-    HAL_Delay(500);
 	ST7789_Fill_Color(RED);
-    HAL_Delay(500);
 	ST7789_Fill_Color(BLUE);
-    HAL_Delay(500);
 	ST7789_Fill_Color(GREEN);
-    HAL_Delay(500);
 	ST7789_Fill_Color(YELLOW);
-    HAL_Delay(500);
 	ST7789_Fill_Color(BROWN);
-    HAL_Delay(500);
 	ST7789_Fill_Color(DARKBLUE);
-    HAL_Delay(500);
 	ST7789_Fill_Color(MAGENTA);
-    HAL_Delay(500);
 	ST7789_Fill_Color(LIGHTGREEN);
-    HAL_Delay(500);
 	ST7789_Fill_Color(LGRAY);
-    HAL_Delay(500);
 	ST7789_Fill_Color(LBBLUE);
-    HAL_Delay(500);
 	ST7789_Fill_Color(WHITE);
-	HAL_Delay(500);
 
-	ST7789_WriteString(10, 10, "Font test.", Font_16x26, GBLUE, WHITE);
-	ST7789_WriteString(10, 50, "Hello Steve!", Font_7x10, RED, WHITE);
-	ST7789_WriteString(10, 75, "Hello Steve!", Font_11x18, YELLOW, WHITE);
-	ST7789_WriteString(10, 100, "Hello Steve!", Font_16x26, MAGENTA, WHITE);
+	ST7789_WriteString_Fast(10, 10, "Font test.", Font_16x26, GBLUE, WHITE);
+	ST7789_WriteString_Fast(10, 50, "Hello Steve!", Font_7x10, RED, WHITE);
+	ST7789_WriteString_Fast(10, 75, "Hello Steve!", Font_11x18, YELLOW, WHITE);
+	ST7789_WriteString_Fast(10, 100, "Hello Steve!", Font_16x26, MAGENTA, WHITE);
 	HAL_Delay(1000);
 
 	ST7789_Fill_Color(RED);
-	ST7789_WriteString(10, 10, "Rect./Line.", Font_11x18, YELLOW, BLACK);
+	ST7789_WriteString_Fast(10, 10, "Rect./Line.", Font_11x18, YELLOW, BLACK);
 	ST7789_DrawRectangle(30, 30, 100, 100, WHITE);
-	HAL_Delay(1000);
 
-	ST7789_Fill_Color(RED);
 	ST7789_WriteString(10, 10, "Filled Rect.", Font_11x18, YELLOW, BLACK);
 	ST7789_DrawFilledRectangle(30, 30, 50, 50, WHITE);
-	HAL_Delay(1000);
 
-	ST7789_Fill_Color(RED);
 	ST7789_WriteString(10, 10, "Circle.", Font_11x18, YELLOW, BLACK);
 	ST7789_DrawCircle(60, 60, 25, WHITE);
-	HAL_Delay(1000);
 
-	ST7789_Fill_Color(RED);
 	ST7789_WriteString(10, 10, "Filled Cir.", Font_11x18, YELLOW, BLACK);
 	ST7789_DrawFilledCircle(60, 60, 25, WHITE);
-	HAL_Delay(1000);
 
-	ST7789_Fill_Color(RED);
 	ST7789_WriteString(10, 10, "Triangle", Font_11x18, YELLOW, BLACK);
 	ST7789_DrawTriangle(30, 30, 30, 70, 60, 40, WHITE);
-	HAL_Delay(1000);
 
-	ST7789_Fill_Color(RED);
 	ST7789_WriteString(10, 10, "Filled Tri", Font_11x18, YELLOW, BLACK);
 	ST7789_DrawFilledTriangle(30, 30, 30, 70, 60, 40, WHITE);
 	HAL_Delay(1000);

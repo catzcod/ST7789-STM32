@@ -3,6 +3,10 @@
 #include "fonts.h"
 #include "main.h"
 
+/* EXTERNAL DEBUG STUFF */
+extern TIM_HandleTypeDef htim5;
+extern uint32_t GLOBAL_VAR_32BIT;
+
 /* choose a Hardware SPI port to use. */
 #define ST7789_SPI_PORT hspi1
 extern SPI_HandleTypeDef ST7789_SPI_PORT;
@@ -16,6 +20,9 @@ extern SPI_HandleTypeDef ST7789_SPI_PORT;
 /* If u need CS control, comment below*/
 #define CFG_NO_CS
 
+/* If u need Backlight control, uncomment below*/
+#define USE_BLK
+
 /* Pin connection*/
 #define ST7789_RST_PORT DPY_RES_GPIO_Port
 #define ST7789_RST_PIN  DPY_RES_Pin
@@ -27,10 +34,10 @@ extern SPI_HandleTypeDef ST7789_SPI_PORT;
 #define ST7789_CS_PIN   ST7789_CS_Pin
 #endif
 
-/* If u need Backlight control, uncomment below */
-//#define BLK_PORT
-//#define BLK_PIN
-
+#ifdef USE_BLK
+#define ST7789_BLK_PORT DPY_BLK_GPIO_Port
+#define ST7789_BLK_PIN  DPY_BLK_Pin
+#endif
 
 /*
  * Comment one to use another.
