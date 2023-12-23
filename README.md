@@ -14,7 +14,7 @@ This upgraded code has been tested on 240x240 LCD screens. You can look into **d
 > DMA is only useful under huge dataflow conditions, e.g: Clear full screen or draw a bitmap.  
 > Most MCUs doesn't have a large RAM, so a  framebuffer is "cut" into pieces, e.g: a 240x5 pixel buffer for a 240x240 screen.  
 
-Using full frame buffer of 240*240*2 = 115200 bytes, it takes 112ms to transfer the buffer via SPI in 2 transactions without DMA.
+Using full frame buffer of 240x240x2 = 115200 bytes, it takes 112ms to transfer the buffer via SPI in 2 transactions without DMA.
 With DMA 115200 bytes transfer takes 64 ms.
 
 Functions with "_BUF" are working with the buffer only.
