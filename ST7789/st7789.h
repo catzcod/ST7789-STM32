@@ -3,19 +3,12 @@
 #include "fonts.h"
 #include "main.h"
 
-/* EXTERNAL DEBUG STUFF */
-extern TIM_HandleTypeDef htim5;
-extern uint32_t GLOBAL_VAR_32BIT;
-
 /* choose a Hardware SPI port to use. */
 #define ST7789_SPI_PORT hspi1
 extern SPI_HandleTypeDef ST7789_SPI_PORT;
 
 /* choose whether use DMA or not */
-//#define USE_DMA
-
-/* choose whether use framebuffer or not */
-#define USE_FRAMEBUFFER
+#define USE_DMA
 
 /* If u need CS control, comment below*/
 #define CFG_NO_CS
@@ -241,12 +234,16 @@ extern SPI_HandleTypeDef ST7789_SPI_PORT;
 void ST7789_Init(void);
 void ST7789_SetRotation(uint8_t m);
 void ST7789_Fill_Color(uint16_t color);
+void ST7789_Fill_Color_BUF(uint16_t color);
 void ST7789_DrawPixel(uint16_t x, uint16_t y, uint16_t color);
+void ST7789_DrawPixel_BUF(uint16_t x, uint16_t y, uint16_t color);
 void ST7789_Fill(uint16_t xSta, uint16_t ySta, uint16_t xEnd, uint16_t yEnd, uint16_t color);
 void ST7789_DrawPixel_4px(uint16_t x, uint16_t y, uint16_t color);
+void ST7789_Display_BUF();
 
 /* Graphical functions. */
 void ST7789_DrawLine(uint16_t x1, uint16_t y1, uint16_t x2, uint16_t y2, uint16_t color);
+void ST7789_DrawLine_BUF(uint16_t x1, uint16_t y1, uint16_t x2, uint16_t y2, uint16_t color);
 void ST7789_DrawRectangle(uint16_t x1, uint16_t y1, uint16_t x2, uint16_t y2, uint16_t color);
 void ST7789_DrawCircle(uint16_t x0, uint16_t y0, uint8_t r, uint16_t color);
 void ST7789_DrawImage(uint16_t x, uint16_t y, uint16_t w, uint16_t h, const uint16_t *data);
@@ -256,6 +253,7 @@ void ST7789_InvertColors(uint8_t invert);
 void ST7789_WriteChar(uint16_t x, uint16_t y, char ch, FontDef font, uint16_t color, uint16_t bgcolor);
 void ST7789_WriteString(uint16_t x, uint16_t y, const char *str, FontDef font, uint16_t color, uint16_t bgcolor);
 void ST7789_WriteString_Fast(uint16_t x, uint16_t y, const char *str, FontDef font, uint16_t color, uint16_t bgcolor);
+void ST7789_WriteString_BUF(uint16_t x, uint16_t y, const char *str, FontDef font, uint16_t color, uint16_t bgcolor);
 
 /* Extented Graphical functions. */
 void ST7789_DrawFilledRectangle(uint16_t x, uint16_t y, uint16_t w, uint16_t h, uint16_t color);

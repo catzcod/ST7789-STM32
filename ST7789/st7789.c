@@ -2,18 +2,19 @@
 #include "st7789.h"
 
 #ifdef USE_DMA
-uint16_t DMA_MIN_SIZE = 16;
-/* If you're using DMA, then u need a "framebuffer" to store datas to be displayed.
- * If your MCU don't have enough RAM, please avoid using DMA(or set 5 to 1).
- * And if your MCU have enough RAM(even larger than full-frame size),
- * Then you can specify the framebuffer size to the full resolution below.
- */
+#define DMA_MIN_SIZE 16 // Minimum size of SPI stransfer block when DMA still applies.
 #endif
 
-#if defined(USE_DMA) || defined(USE_FRAMEBUFFER)
-#define HOR_LEN   ST7789_HEIGHT	//	Alse mind the resolution of your screen!
-uint16_t disp_buf[ST7789_WIDTH * HOR_LEN];
-#endif
+/* Buffer is required for faster SPI transfers to store datas to be displayed.
+ * Buffer can be used as a framebuffer, set buffer length to WIDTHxHEIGHT.
+ * If your MCU don't have enough RAM, please avoid using large buffers and DMA.
+ * And if your MCU have enough RAM(even larger than full-frame size),
+ * Then you can specify the framebuffer size to the full resolution WIDTHxHEIGHT.
+ */
+
+#define BUF_LEN    ST7789_WIDTH * ST7789_HEIGHT   // Buffer elements count
+#define BUF_BYTE   2                              // Size of buffer element in bytes
+uint16_t buffer[BUF_LEN];                         // 16bit color buffer RGB565
 
 /**
  * @brief Write command to ST7789 controller
@@ -40,13 +41,12 @@ static void ST7789_WriteData(uint8_t *buff, size_t buff_size)
 	ST7789_DC_Set();
 	// split data in small chunks because HAL can't send more than 64K at once
 	while (buff_size > 0) {
-		uint16_t chunk_size = buff_size > 65535 ? 65535 : buff_size;
+		uint16_t chunk_size = buff_size > 0xFFFF ? 0xFFFF : buff_size;
 #ifdef USE_DMA
-		if (DMA_MIN_SIZE <= buff_size)
+		if (buff_size >= DMA_MIN_SIZE)
 		{
 			HAL_SPI_Transmit_DMA(&ST7789_SPI_PORT, buff, chunk_size);
-			while (ST7789_SPI_PORT.hdmatx->State != HAL_DMA_STATE_READY)
-			{}
+			while (ST7789_SPI_PORT.hdmatx->State != HAL_DMA_STATE_READY) {}
 		}
 		else
 			HAL_SPI_Transmit(&ST7789_SPI_PORT, buff, chunk_size, HAL_MAX_DELAY);
@@ -105,7 +105,6 @@ void ST7789_SetRotation(uint8_t m)
  */
 static void ST7789_SetAddressWindow(uint16_t x0, uint16_t y0, uint16_t x1, uint16_t y1)
 {
-	ST7789_Select();
 	uint16_t x_start = x0 + X_SHIFT, x_end = x1 + X_SHIFT;
 	uint16_t y_start = y0 + Y_SHIFT, y_end = y1 + Y_SHIFT;
 
@@ -124,7 +123,6 @@ static void ST7789_SetAddressWindow(uint16_t x0, uint16_t y0, uint16_t x1, uint1
 	}
 	/* Write to RAM */
 	ST7789_WriteCommand(ST7789_RAMWR);
-	ST7789_UnSelect();
 }
 
 /**
@@ -134,9 +132,8 @@ static void ST7789_SetAddressWindow(uint16_t x0, uint16_t y0, uint16_t x1, uint1
  */
 void ST7789_Init(void)
 {
-#ifdef USE_DMA
-	memset(disp_buf, 0, sizeof(disp_buf)); // clear framebuffer
-#endif
+	memset(buffer, 0, sizeof(buffer)); // clear buffer
+
 	HAL_Delay(25);
 	ST7789_RST_Clr();
 	HAL_Delay(25);
@@ -189,7 +186,6 @@ void ST7789_Init(void)
 	ST7789_WriteCommand (ST7789_DISPON);	//	Main screen turned on
 
 	HAL_Delay(50);
-	ST7789_Fill_Color(BLACK);				//	Fill with Black.
 }
 
 /**
@@ -199,29 +195,54 @@ void ST7789_Init(void)
  */
 void ST7789_Fill_Color(uint16_t color)
 {
-	uint16_t i;
+	ST7789_Fill_Color_BUF(color);
 	ST7789_SetAddressWindow(0, 0, ST7789_WIDTH - 1, ST7789_HEIGHT - 1);
+	uint32_t window_len = ST7789_WIDTH * ST7789_HEIGHT;
 
-#if defined(USE_DMA) || defined(USE_FRAMEBUFFER)
-	for (i = 0; i < ST7789_HEIGHT / HOR_LEN; i++)
-	{
-		memset(disp_buf, color, sizeof(disp_buf));
-		ST7789_WriteData((uint8_t*)disp_buf, sizeof(disp_buf));
+	// split data in chunks with amount of MIN(window_len, buffer_len)
+	uint32_t chunk_len = window_len > BUF_LEN ? BUF_LEN : window_len;
+	uint32_t chunk_size = chunk_len * BUF_BYTE;  // chunk size in bytes
+	int32_t trn_remain = window_len * BUF_BYTE;  // remaining transfer amount in bytes
+	while (trn_remain > 0) {
+		if (trn_remain < chunk_size)
+			chunk_size = trn_remain;
+		ST7789_WriteData((uint8_t*)buffer, chunk_size);
+		trn_remain -= chunk_size;
 	}
-#else
-	uint16_t j;
-	for (i = 0; i < ST7789_WIDTH; i++)
-		for (j = 0; j < ST7789_HEIGHT; j++) {
-			uint8_t data[] = {color >> 8, color & 0xFF};
-			ST7789_WriteData(data, sizeof(data));
-		}
-#endif
 }
 
-void ST7789_Display_Framebuffer()
+/**
+ * @brief Fill buffer with color
+ * @return none
+ */
+void ST7789_Fill_Color_BUF(uint16_t color)
+{
+	uint16_t color565 = ((color >> 8) & 0x00FF) | (color << 8);
+	for (uint32_t index = 0; index < BUF_LEN; index++)
+		buffer[index] = color565;
+}
+
+/**
+ * @brief Transfer buffer content to SPI
+ * @return none
+ */
+void ST7789_Display_BUF()
 {
 	ST7789_SetAddressWindow(0, 0, ST7789_WIDTH - 1, ST7789_HEIGHT - 1);
-	ST7789_WriteData((uint8_t*)disp_buf, sizeof(disp_buf));
+	uint32_t window_len = ST7789_WIDTH * ST7789_HEIGHT;
+
+    // buffer can be bigger that window and only window amount of data must be transferred
+	// buffer can be smaller than window and buffer must be transferred several times
+	// split data in chunks with amount of MIN(window_len, buffer_len)
+	uint32_t chunk_len = window_len > BUF_LEN ? BUF_LEN : window_len;
+	uint32_t chunk_size = chunk_len * BUF_BYTE;  // chunk size in bytes
+	int32_t trn_remain = window_len * BUF_BYTE;  // remaining transfer amount in bytes
+	while (trn_remain > 0) {
+		if (trn_remain < chunk_size)
+			chunk_size = trn_remain;
+		ST7789_WriteData((uint8_t*)buffer, chunk_size);
+		trn_remain -= chunk_size;
+	}
 }
 
 /**
@@ -232,12 +253,19 @@ void ST7789_Display_Framebuffer()
  */
 void ST7789_DrawPixel(uint16_t x, uint16_t y, uint16_t color)
 {
-	if ((x < 0) || (x >= ST7789_WIDTH) ||
-			(y < 0) || (y >= ST7789_HEIGHT))	return;
+	if ((x < 0) || (x >= ST7789_WIDTH) || (y < 0) || (y >= ST7789_HEIGHT))
+		return;
 
-	ST7789_SetAddressWindow(x, y, x, y);
 	uint8_t data[] = {color >> 8, color & 0xFF};
+	ST7789_SetAddressWindow(x, y, x, y);
 	ST7789_WriteData(data, sizeof(data));
+}
+
+void ST7789_DrawPixel_BUF(uint16_t x, uint16_t y, uint16_t color)
+{
+	uint16_t pos = y * ST7789_WIDTH + x;
+	if (pos < BUF_LEN)
+		buffer[pos] = ((color >> 8) & 0x00FF) | (color << 8);
 }
 
 /**
@@ -292,8 +320,6 @@ void ST7789_DrawLine(uint16_t x0, uint16_t y0, uint16_t x1, uint16_t y1,
 		swap = x1;
 		x1 = y1;
 		y1 = swap;
-		//_swap_int16_t(x0, y0);
-		//_swap_int16_t(x1, y1);
 	}
 
 	if (x0 > x1) {
@@ -304,8 +330,6 @@ void ST7789_DrawLine(uint16_t x0, uint16_t y0, uint16_t x1, uint16_t y1,
 		swap = y0;
 		y0 = y1;
 		y1 = swap;
-		//_swap_int16_t(x0, x1);
-		//_swap_int16_t(y0, y1);
 	}
 
 	int16_t dx, dy;
@@ -326,6 +350,57 @@ void ST7789_DrawLine(uint16_t x0, uint16_t y0, uint16_t x1, uint16_t y1,
 			ST7789_DrawPixel(y0, x0, color);
 		} else {
 			ST7789_DrawPixel(x0, y0, color);
+		}
+		err -= dy;
+		if (err < 0) {
+			y0 += ystep;
+			err += dx;
+		}
+	}
+}
+
+void ST7789_DrawLine_BUF(uint16_t x0, uint16_t y0, uint16_t x1, uint16_t y1,
+		uint16_t color) {
+	uint16_t swap;
+	uint16_t steep = ABS(y1 - y0) > ABS(x1 - x0);
+	if (steep) {
+		swap = x0;
+		x0 = y0;
+		y0 = swap;
+
+		swap = x1;
+		x1 = y1;
+		y1 = swap;
+	}
+
+	if (x0 > x1) {
+		swap = x0;
+		x0 = x1;
+		x1 = swap;
+
+		swap = y0;
+		y0 = y1;
+		y1 = swap;
+	}
+
+	int16_t dx, dy;
+	dx = x1 - x0;
+	dy = ABS(y1 - y0);
+
+	int16_t err = dx / 2;
+	int16_t ystep;
+
+	if (y0 < y1) {
+		ystep = 1;
+	} else {
+		ystep = -1;
+	}
+
+	for (; x0<=x1; x0++) {
+		if (steep) {
+			ST7789_DrawPixel_BUF(y0, x0, color);
+		} else {
+			ST7789_DrawPixel_BUF(x0, y0, color);
 		}
 		err -= dy;
 		if (err < 0) {
@@ -530,6 +605,53 @@ void ST7789_WriteString_Fast(uint16_t x, uint16_t y, const char *str, FontDef fo
 	}
 	ST7789_SetAddressWindow(x, y, x + window_width - 1, y + window_height - 1);
 	ST7789_WriteData((uint8_t*)data, sizeof(data));
+}
+
+/**
+ * @brief Write a string to the framebuffer
+ * @param  x&y -> cursor of the start point.
+ * @param str -> string to write
+ * @param font -> fontstyle of the string
+ * @param color -> color of the string
+ * @param bgcolor -> background color of the string
+ * @return  none
+ */
+void ST7789_WriteString_BUF(uint16_t x, uint16_t y, const char *str, FontDef font, uint16_t color, uint16_t bgcolor)
+{
+	if (x >= ST7789_WIDTH) return;
+	if (y >= ST7789_HEIGHT) return;
+
+	uint32_t string_chars = strlen(str);
+	uint32_t string_width = string_chars * font.width;
+	uint32_t string_height = font.height;
+	uint32_t window_width, window_height;
+
+	if ((x + string_width) < ST7789_WIDTH)
+		window_width = string_width;
+	else
+		window_width = ST7789_WIDTH - x;
+
+	if ((y + string_height) < ST7789_HEIGHT)
+		window_height = string_height;
+	else
+		window_height = ST7789_HEIGHT - y;
+
+	char ch;
+	uint32_t h,w,b;
+	uint32_t fb_pos;      // position in the framebuffer
+	for (h = 0; h < window_height; h++) {
+		for (w = 0; w < window_width; w++) {
+			ch = str[w / font.width]; // char of the string where current scan pos(w,h) is located
+			b = font.data[(ch - 32) * font.height + h];
+			fb_pos = ST7789_WIDTH * (y + h) + x + w;
+			if ((b << (w % font.width)) & 0x8000) {
+				buffer[fb_pos] = ((color >> 8) & 0x00FF) | (color << 8);
+			}
+			else {
+				buffer[fb_pos] = ((bgcolor >> 8) & 0x00FF) | (bgcolor << 8);
+			}
+		}
+	}
 }
 
 
