@@ -1,5 +1,5 @@
 # ST7789-STM32
-Using STM32's Hardware SPI(with simple DMA support) to drive a ST7789 based LCD display.
+Using STM32's Hardware SPI(with improved DMA support) to drive a ST7789 based LCD display.
 
 ## How to use ?
 
@@ -9,10 +9,18 @@ Using STM32's Hardware SPI(with simple DMA support) to drive a ST7789 based LCD 
 4. Run a `ST7789_Test()` to exam this driver.  
 5. Don't forget to turn the backlight on  
 
-This code has been tested on 240x240 & 170x320 LCD screens. You can look into **demo** directory for details.  
+This upgraded code has been tested on 240x240 LCD screens. You can look into **demo** directory for details from previous developer.  
 
 > DMA is only useful under huge dataflow conditions, e.g: Clear full screen or draw a bitmap.  
 > Most MCUs doesn't have a large RAM, so a  framebuffer is "cut" into pieces, e.g: a 240x5 pixel buffer for a 240x240 screen.  
+
+Using full frame buffer of 240*240*2 = 115200 bytes, it takes 112ms to transfer the buffer via SPI in 2 transactions without DMA.
+With DMA 115200 bytes transfer takes 64 ms.
+
+Functions with "_BUF" are working with the buffer only.
+Other functions (area filling functions) may utilise buffer to speed up data transfers.
+
+The most convenient way to utilise full frame buffer is to draw into the buffer and display the buffer time to time.
 
 ## SPI Interface
 
