@@ -527,6 +527,50 @@ void ST7789_WriteChar(uint16_t x, uint16_t y, char ch, FontDef font, uint16_t co
 }
 
 /**
+ * @brief Write a char to the framebuffer
+ * @param  x&y -> cursor of the start point.
+ * @param ch -> char to write
+ * @param font -> fontstyle of the string
+ * @param color -> color of the char
+ * @param bgcolor -> background color of the char
+ * @return  none
+ */
+void ST7789_WriteChar_BUF(uint16_t x, uint16_t y, char ch, FontDef font, uint16_t color, uint16_t bgcolor)
+{
+	if (x >= ST7789_WIDTH) return;
+	if (y >= ST7789_HEIGHT) return;
+
+	uint32_t char_width = font.width;
+	uint32_t char_height = font.height;
+	uint32_t window_width, window_height;
+
+	if ((x + char_width) < ST7789_WIDTH)
+		window_width = char_width;
+	else
+		window_width = ST7789_WIDTH - x;
+
+	if ((y + char_height) < ST7789_HEIGHT)
+		window_height = char_height;
+	else
+		window_height = ST7789_HEIGHT - y;
+
+	uint32_t h,w,b;
+	uint32_t fb_pos;      // position in the framebuffer
+	for (h = 0; h < window_height; h++) {
+		for (w = 0; w < window_width; w++) {
+			b = font.data[(ch - 32) * font.height + h];
+			fb_pos = ST7789_WIDTH * (y + h) + x + w;
+			if ((b << (w % font.width)) & 0x8000) {
+				buffer[fb_pos] = ((color >> 8) & 0x00FF) | (color << 8);
+			}
+			else {
+				buffer[fb_pos] = ((bgcolor >> 8) & 0x00FF) | (bgcolor << 8);
+			}
+		}
+	}
+}
+
+/**
  * @brief Write a string 
  * @param  x&y -> cursor of the start point.
  * @param str -> string to write
